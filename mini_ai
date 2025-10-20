@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pieni Sääntöpohjainen Robotti</title>
+    <!-- Ladataan Tailwind CSS ulkoasua varten -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Asetetaan Inter-fontti */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f7;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        /* Asetetaan chat-ikkunalle maksimikorkeus ja vieritys */
+        #chat-history {
+            height: calc(100% - 6rem); /* Laske tila input-alueelta */
+            overflow-y: auto;
+            scroll-behavior: smooth;
+        }
+        /* Korostetaan botin viestit */
+        .bot-message {
+            background-color: #e0f2fe; /* Light blue for bot */
+        }
+        /* Korostetaan käyttäjän viestit */
+        .user-message {
+            background-color: #d1fae5; /* Light green for user */
+        }
+
+        /* --- Kirjoitusindikaattorin (Bouncing Dots) Tyylit --- */
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            background-color: #e0f2fe; /* Match bot-message color */
+            border-radius: 12px 12px 12px 0; /* Match bot message style */
+            max-width: fit-content;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); /* Match shadow-sm */
+        }
+        .typing-dot {
+            width: 6px;
+            height: 6px;
+            background-color: #3b82f6; /* A nice blue color */
+            border-radius: 50%;
+            margin: 0 2px;
+            animation: bounce 1.2s infinite ease-in-out;
+        }
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        @keyframes bounce {
+            0%, 80%, 100% {
+                transform: translateY(0);
+            }
+            40% {
+                transform: translateY(-5px);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-4 sm:p-8">
+
+    <!-- Pääkontti, joka toimii chat-ikkunana -->
+    <div id="chat-container" class="bg-white shadow-2xl rounded-xl w-full max-w-lg h-[85vh] flex flex-col transition-all duration-300">
+        <!-- Otsikko -->
+        <div class="p-4 bg-indigo-600 text-white rounded-t-xl shadow-md flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+            </svg>
+            <h1 class="text-xl font-semibold">Pieni Robotti</h1>
+        </div>
+
+        <!-- Chat-historia -->
+        <div id="chat-history" class="p-4 flex-grow space-y-4">
+            <!-- Botin aloitussanoma -->
+            <div class="flex justify-start">
+                <div class="bot-message p-3 rounded-lg max-w-xs shadow-sm">
+                    <p class="text-gray-800">Terve! Olen pieni sääntöpohjainen tekoäly. Kokeile sanoa "Hei" tai kysyä "Mitä kuuluu?".</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Syötekenttä ja Lähetä-painike -->
+        <div class="p-4 border-t border-gray-200 flex space-x-2">
+            <input type="text" id="user-input" placeholder="Kirjoita viesti..."
+                   class="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-150"
+                   onkeydown="if(event.key === 'Enter') sendMessage()">
+            <button onclick="sendMessage()"
+                    class="bg-indigo-600 text-white p-3 rounded-lg font-medium hover:bg-indigo-700 transition duration-150 shadow-md active:shadow-none active:bg-indigo-800">
+                Lähetä
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const chatHistory = document.getElementById('chat-history');
+        const userInput = document.getElementById('user-input');
+
+        // ** TILA (STATE) MUUTTUJAT **
+        let expectingColor = false;
+        let expectingTeam = false;
+        let expectingJoke = false; // Tila muistaa, jos on juuri kerrottu vitsi
+        let expectingMinecraftBlock = false; // Tila muistaa, jos odotetaan Minecraft-lohkoa
+        let expectingFortnitePlatform = false; // UUSI: Tila muistaa, jos odotetaan Fortnite-alustaa
+        let expectingMovieGenre = false; // UUSI: Tila muistaa, jos odotetaan elokuvan/sarjan genreä
+        // Global variable to hold the typing indicator element reference
+        let typingIndicatorElement = null;
+
+        const JOKES = [
+            "Mitä yhteistä on banaanilla ja tietokoneella? Molemmilla on kuori!",
+            "Miksi hämähäkki on hyvä netissä? Koska sillä on niin monta seittiä!",
+            "Mitä kala sanoo, kun se törmää seinään? DAM!",
+            "Miksi kummitus ei mennyt kouluun? Koska sillä oli flunssa.",
+            "Miksi pöllö on viisas? Koska se tietää, ettei ole nähnyt kaikkea!"
+        ];
+
+        // Funktio viestin lisäämiseksi chat-historiaan
+        function addMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex ${sender === 'user' ? 'justify-end' : 'justify-start'}`;
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = `p-3 rounded-xl max-w-xs shadow-md text-sm ${
+                sender === 'user' ? 'user-message rounded-br-none' : 'bot-message rounded-tl-none'
+            }`;
+
+            contentDiv.innerHTML = `<p class="text-gray-800">${text}</p>`;
+            messageDiv.appendChild(contentDiv);
+            chatHistory.appendChild(messageDiv);
+
+            // Vieritä automaattisesti alas uusimman viestin kohdalle
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        // --- Kirjoitusindikaattorin (Typing Indicator) Toiminnallisuus ---
+
+        // Funktio näyttämään pomppivat pisteet
+        function showTypingIndicator() {
+            // 1. Luo ulompi container (simuloi viestin sijainnin)
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex justify-start`;
+            
+            // 2. Luo sisempi content div, jossa on itse indikaattori
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'typing-indicator'; 
+
+            // 3. Luo kolme pomppivaa pistettä
+            for (let i = 1; i <= 3; i++) {
+                const dot = document.createElement('div');
+                dot.className = 'typing-dot';
+                contentDiv.appendChild(dot);
+            }
+
+            messageDiv.appendChild(contentDiv);
+            chatHistory.appendChild(messageDiv);
+            
+            typingIndicatorElement = messageDiv; // Tallenna viite elementtiin poistoa varten
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        // Funktio poistamaan pomppivat pisteet
+        function removeTypingIndicator() {
+            if (typingIndicatorElement) {
+                typingIndicatorElement.remove();
+                typingIndicatorElement = null;
+            }
+        }
+        
+        // Funktio vitsin kertomiseen
+        function tellJoke() {
+            const randomJoke = JOKES[Math.floor(Math.random() * JOKES.length)];
+            
+            // Asetetaan tila, jotta seuraavaksi voidaan pyytää toista vitsiä
+            expectingJoke = true; 
+            return `${randomJoke} (Sano 'vielä yksi', jos haluat toisen!)`;
+        }
+
+        // Tekoälyn sääntöpohjainen vastauslogiikka
+        function respondToUser(message) {
+            // Muutetaan viesti pieniksi kirjaimiksi vertailua varten
+            const normalizedMessage = message.toLowerCase().trim();
+
+            let response = null;
+            let clearState = true; // Oletus: nollataan tila jokaisen vastauksen jälkeen
+
+            // 1. KONTEKSTUAALISET VASTAUKSET
+            
+            // UUSI KONTEKSTI: Jos odotetaan elokuvan/sarjan genreä
+            if (expectingMovieGenre) {
+                expectingMovieGenre = false;
+                const movieResponse = (genre) => `${genre.charAt(0).toUpperCase() + genre.slice(1)} on loistava valinta! Hyvät ${genre.toLowerCase()}-leffat ovat aina viihdyttäviä.`;
+
+                if (normalizedMessage.includes('toiminta') || normalizedMessage.includes('action')) {
+                    response = movieResponse('Toiminta');
+                } else if (normalizedMessage.includes('komedia') || normalizedMessage.includes('comedy') || normalizedMessage.includes('hauska')) {
+                    response = movieResponse('Komedia');
+                } else if (normalizedMessage.includes('scifi') || normalizedMessage.includes('tiede')) {
+                    response = movieResponse('Sci-fi');
+                } else if (normalizedMessage.includes('fantasia') || normalizedMessage.includes('fantasy')) {
+                    response = movieResponse('Fantasia');
+                } else if (normalizedMessage.includes('kauhu') || normalizedMessage.includes('horror')) {
+                    response = movieResponse('Kauhu');
+                } else {
+                    response = "Mielenkiintoista! Genrevaihtoehtoja on paljon. Minusta hyvä juoni on aina tärkein!";
+                }
+            }
+
+            // KONTEKSTI: Jos odotetaan Fortnite-alustaa
+            else if (expectingFortnitePlatform) {
+                expectingFortnitePlatform = false;
+                if (normalizedMessage.includes('pc') || normalizedMessage.includes('tietokone') || normalizedMessage.includes('konsoli') || normalizedMessage.includes('ps') || normalizedMessage.includes('xbox') || normalizedMessage.includes('switch')) {
+                    response = "Mahtavaa! Pelaaminen eri alustoilla on hauskaa. Toivottavasti saat paljon voittoja!";
+                } else {
+                    response = "Fortniteä voi pelata monella laitteella. Kokeile sanoa esimerkiksi 'PC' tai 'konsoli'!";
+                }
+            }
+            
+            // KONTEKSTI: Jos odotetaan Minecraft-lohkoa
+            else if (expectingMinecraftBlock) {
+                expectingMinecraftBlock = false;
+                
+                // Päivitetty Minecraft-vastauslogiikka
+                const blockResponse = (blockName) => `Ahaa, ${blockName} on klassikko! Se on yksi tärkeimmistä lohkoista rakentamiseen ja maailman tutkimiseen. Hieno valinta!`;
+
+                if (normalizedMessage.includes('ruoho') || normalizedMessage.includes('grass') || normalizedMessage.includes('multa') || normalizedMessage.includes('dirt')) {
+                    response = blockResponse('Ruoho/Multa');
+                } else if (normalizedMessage.includes('timantti') || normalizedMessage.includes('diamond')) {
+                    response = blockResponse('Timantti');
+                } else if (normalizedMessage.includes('kivi') || normalizedMessage.includes('stone')) {
+                    response = blockResponse('Kivi');
+                } else if (normalizedMessage.length > 3) { // Jos vastaus ei ollut tyhjä, mutta ei täsmännyt mihinkään tiettyyn lohkoon
+                    response = `${normalizedMessage.charAt(0).toUpperCase() + normalizedMessage.slice(1)} on varmasti hyödyllinen lohko! Minecraftissa on niin paljon valinnanvaraa!`;
+                } else {
+                     response = "Ymmärsin, että puhumme lohkoista, mutta en ole varma mikä juuri tuo oli! Minecraftissa on niin paljon valinnanvaraa!";
+                }
+            }
+            // KONTEKSTI: Jos joukkuetta odotetaan (jalkapallo-kysymys)
+            else if (expectingTeam) {
+                expectingTeam = false; // Tila nollataan heti
+                
+                // Tunnistetut esimerkkijoukkueet
+                if (normalizedMessage.includes('hjk') || normalizedMessage.includes('manchester') || normalizedMessage.includes('barcelona') || normalizedMessage.includes('real madrid') || normalizedMessage.includes('lopa') || normalizedMessage.includes('liverpool') || normalizedMessage.includes('bayern munchen')) {
+                    response = "Vau, hieno valinta! Se on tunnettu ja menestynyt joukkue. Toivottavasti heillä on hyvä kausi!";
+                } else {
+                    response = "Kiitos tiedosta! Kaikki joukkueet tarvitsevat faneja. Onko sinulla jokin muu harrastus josta haluaisit kertoa?";
+                }
+            }
+            
+            // KONTEKSTI: Jos väriä odotetaan (auto-kysymys)
+            else if (expectingColor) {
+                expectingColor = false; 
+
+                // Tarkistetaan, sisältääkö vastaus jonkin tunnistetun värin
+                if (normalizedMessage.includes('punainen') || normalizedMessage.includes('musta') || normalizedMessage.includes('valkoinen') || normalizedMessage.includes('keltainen') || normalizedMessage.includes('harmaa') || normalizedMessage.includes('sininen')) {
+                    response = `Niinpä, ${normalizedMessage.split(' ')[0]} on todella suosittu ja hieno valinta!`;
+                } else {
+                    response = "Se on hyvä. Minusta sininen on aina tyylikäs valinta autoon! Mitä muuta voisin auttaa sinua tietämään?";
+                }
+            }
+
+            // KONTEKSTI: Odotetaan toista vitsiä
+            else if (expectingJoke && (normalizedMessage.includes('vielä yksi') || normalizedMessage.includes('toinen') || normalizedMessage.includes('uusi vitsi'))) {
+                 response = tellJoke();
+                 clearState = false; // Pidetään tila päällä uutta vitsiä varten
+            }
+
+
+            // 2. PÄÄSÄÄNNÖT (ajetaan vain, jos kontekstuaalista vastausta ei löytynyt)
+            if (!response) {
+                // Aseta kaikki tila-muuttujat pois päältä, jos käyttäjä siirtyi uuteen aiheeseen
+                if (expectingJoke) expectingJoke = false;
+                if (expectingMinecraftBlock) expectingMinecraftBlock = false;
+                if (expectingFortnitePlatform) expectingFortnitePlatform = false;
+                if (expectingMovieGenre) expectingMovieGenre = false; // Nollataan myös uusi tila
+
+                if (normalizedMessage.includes('hei') || normalizedMessage.includes('moi') || normalizedMessage.includes('terve')) {
+                    response = "Hei! Kiva, kun otit yhteyttä. Kuinka voin olla avuksi?";
+                } 
+                // SÄÄNTÖ: Hymiö
+                else if (normalizedMessage === ':)') {
+                    response = ":)";
+                }
+                // SÄÄNTÖ: Vitsi
+                else if (normalizedMessage.includes('kerro vitsi') || normalizedMessage.includes('vitsi')) {
+                    response = tellJoke();
+                    clearState = false; // Pidetään tila päällä uutta vitsiä varten
+                }
+                // SÄÄNTÖ: OK-vastaus
+                else if (normalizedMessage === 'ok') {
+                    response = "Ok, haluatko viälä jotain?";
+                }
+                else if (normalizedMessage.includes('mitä kuuluu') || normalizedMessage.includes('kuulumiset')) {
+                    response = "Kiitos kysymästä, minulla on kaikki hyvin. Olen valmis työskentelemään! Entä sinulla?";
+                } 
+                // UUSI SÄÄNTÖ: Hae verkosta (SIMULOITU)
+                else if (normalizedMessage.includes('hae verkosta') || normalizedMessage.includes('google') || normalizedMessage.includes('etsi netistä')) {
+                    response = "Olen vain pieni robotti enkä pääse nettiin. Sääli! Minun täytyy luottaa niihin tietoihin, jotka minulla on jo koodissa. Kysy minulta 'mitä osaat', niin kerron mistä tiedän!";
+                }
+                // SÄÄNTÖ: Mitä osaat (PÄIVITETTY Elokuvien/Sarjojen KANSSA)
+                else if (normalizedMessage.includes('mitä osaat') || normalizedMessage.includes('aiheita')) {
+                    response = "Osaan keskustella seuraavista aiheista: tervehdysten, autojen, lemmikkien, harrastusten (erityisesti jalkapallon), Minecraftin, Fortniten, hätätaktiikoiden, elokuvien ja sarjojen genren sekä vitsejen kertomisesta. Kokeile sanoa 'elokuva', 'Fortnite' tai 'hätäpoistumistaktiikka'!";
+                }
+                // UUSI SÄÄNTÖ: Elokuvat/Sarjat
+                else if (normalizedMessage.includes('elokuva') || normalizedMessage.includes('sarja') || normalizedMessage.includes('leffa')) {
+                    response = "Elokuvat ja sarjat ovat loistava tapa rentoutua! Oletko enemmän toiminnan, komedian vai kenties fantasian ystävä? Mikä on sinun suosikkigenresi?";
+                    expectingMovieGenre = true;
+                }
+                // SÄÄNTÖ: Hätäpoistumistaktiikka
+                else if (normalizedMessage.includes('taktiikka') || normalizedMessage.includes('hätäpoistumistaktiikka') || normalizedMessage.includes('pakoon')) {
+                    response = "Hätäpoistumistaktiikka on tärkeää Battle Royale -peleissä! Paras tapa on pysyä rauhallisena, katsoa ympärille ja rakentaa suojaksi seinät nopeasti, jos joudut tulituksen alle. Älä panikoi, vaan siirry turvaan!";
+                }
+                // SÄÄNTÖ: Fortnite
+                else if (normalizedMessage.includes('fortnite')) {
+                    response = "Fortnite on suosittu Battle Royale -peli, jossa voi rakentaa ja pelata kavereiden kanssa! Mitä kautta yleensä pelaat sitä?";
+                    expectingFortnitePlatform = true; // Asetetaan TILA TÄHÄN
+                } 
+                // SÄÄNTÖ: Minecraft (Asettaa tilan kysymyksen jälkeen)
+                else if (normalizedMessage.includes('minecraft')) {
+                    response = "Minecraft on todella suosittu hiekkalaatikkopeli, jossa voi rakentaa melkein mitä tahansa! Se kehittää luovuutta ja ongelmanratkaisutaitoja. Mikä on suosikkilohkosi pelissä?";
+                    expectingMinecraftBlock = true; // Asetetaan TILA TÄHÄN
+                } 
+                else if (normalizedMessage.includes('auto') || normalizedMessage.includes('autot') || normalizedMessage.includes('ajoneuvo')) {
+                    // Auto-sääntö: Asettaa tilan ja kysyy kysymyksen
+                    response = "Autot ovat todella mielenkiintoisia! Ne voivat olla henkilöautoja, busseja tai kuorma-autoja. Tärkeintä autossa on turvallisuus. Muista aina käyttää turvavyötä, kun olet kyydissä! Mikä on sinun suosikkivärisi autossa?";
+                    expectingColor = true; // Asetetaan tila tähän
+                } 
+                // SÄÄNTÖ: Harrastukset
+                else if (normalizedMessage.includes('harrastus') || normalizedMessage.includes('vapaa-aika') || normalizedMessage.includes('mitä teet')) {
+                    response = "Harrastukset ovat tärkeitä! Pelaatko jalkapalloa, luetko kirjoja vai harrastatko koodausta? Kerro minulle suosikkiharrastuksesi!";
+                }
+                // SÄÄNTÖ: Jalkapallo (asettaa tilan seuraavaa vastausta varten)
+                else if (normalizedMessage.includes('jalkapallo') || normalizedMessage.includes('futis')) {
+                    response = "Jalkapallo on hauska ja suosittu joukkuelaji! Siinä pääsee juoksemaan ja tapaamaan kavereita. Kuka on suosikkijoukkueesi?";
+                    expectingTeam = true; // Asetetaan tila tähän
+                }
+                // Spesifi sääntö kissalle
+                else if (normalizedMessage.includes('kissa')) {
+                    response = "Kissat 🐈 ovat suloisia ja usein aika itsenäisiä! Ne tykkäävät nukkua paljon. Onko sinulla kissa vai mietitkö kissan hankkimista?";
+                } 
+                // Spesifi sääntö koiralle
+                else if (normalizedMessage.includes('koira')) {
+                    response = "Koirat 🐕 ovat uskomattoman uskollisia ja leikkisiä ystäviä! Ne tarvitsevat paljon liikuntaa ja huomiota. Mikä on sinun lempikoirarotusi?";
+                }
+                // Yleinen lemmikki-sääntö
+                else if (normalizedMessage.includes('lemmikki') || normalizedMessage.includes('eläin')) {
+                    response = "Eläimet 🐾 ovat ihania! Puhutaan lemmikeistä. Onko sinulla lemmikkiä? Jos on, mikä se on?";
+                } 
+                else if (normalizedMessage.includes('sää') || normalizedMessage.includes('ilma')) {
+                    response = "Minulla ei ole pääsyä reaaliaikaiseen säätietoon, mutta toivon sinulle kaunista ja aurinkoista päivää!";
+                } else if (normalizedMessage.includes('ikä') || normalizedMessage.includes('syntynyt')) {
+                    response = "Olen pieni sääntöpohjainen ohjelma, enkä tiedä tarkkaa syntymäaikaani. Olen tosin juuri nyt valmis oppimaan uutta!";
+                } else if (normalizedMessage.includes('kiitos')) {
+                     response = "Ole hyvä! Autan mielelläni.";
+                } 
+                // SÄÄNTÖ: Kirjoitusvirheen tunnistus (pitkät, tunnistamattomat sanat)
+                else {
+                    // Tarkistetaan, onko kyseessä pitkä, epätavallinen jono
+                    if (normalizedMessage.length > 15 && !normalizedMessage.includes(' ')) {
+                        response = "Taisi tulla kirjoitusvirhe : D";
+                    } else {
+                        // Catch-all vastaus
+                        response = "En tainnut ymmärtää. Kysy minulta 'mitä osaat', niin kerron sinulle mistä voimme keskustella!";
+                    }
+                }
+            }
+
+            // 1. Näytä kirjoitusindikaattori heti
+            showTypingIndicator();
+
+            // 2. Aseta viive vastaukselle (1000ms = 1 sekunti)
+            setTimeout(() => {
+                // 3. Poista kirjoitusindikaattori
+                removeTypingIndicator();
+                
+                // 4. Lisää varsinainen vastaus
+                addMessage(response, 'bot');
+            }, 1000);
+        }
+
+        // Pääfunktio käyttäjän viestin lähettämiseen
+        function sendMessage() {
+            const message = userInput.value.trim();
+
+            if (message === '') {
+                return; // Älä lähetä tyhjää viestiä
+            }
+
+            // Lisää käyttäjän viesti
+            addMessage(message, 'user');
+
+            // Pyydä botilta vastaus
+            respondToUser(message);
+
+            // Tyhjennä syötekenttä
+            userInput.value = '';
+        }
+
+        // Lisätään Enter-tuki syötekenttään varmuuden vuoksi, vaikka se on jo HTML:ssä
+        userInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
