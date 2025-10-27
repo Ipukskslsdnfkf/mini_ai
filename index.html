@@ -111,6 +111,7 @@
         let expectingMinecraftBlock = false; // Tila muistaa, jos odotetaan Minecraft-lohkoa
         let expectingFortnitePlatform = false; // UUSI: Tila muistaa, jos odotetaan Fortnite-alustaa
         let expectingMovieGenre = false; // UUSI: Tila muistaa, jos odotetaan elokuvan/sarjan genreä
+        let expectingHockeyPlayer = false; // UUSI: Tila muistaa, jos odotetaan suosikkijääkiekkoilijaa
         // Global variable to hold the typing indicator element reference
         let typingIndicatorElement = null;
 
@@ -121,6 +122,24 @@
             "Miksi kummitus ei mennyt kouluun? Koska sillä oli flunssa.",
             "Miksi pöllö on viisas? Koska se tietää, ettei ole nähnyt kaikkea!"
         ];
+
+        // UUSI: Lista parhaista 2000-luvun jääkiekkoilijoista
+        const BEST_HOCKEY_PLAYERS = [
+            "Connor McDavid",
+            "Aleksander Barkov",
+            "Sidney Crosby",
+            "Alex Ovechkin",
+            "Auston Matthews",
+            "Leon Draisaitl",
+            "Cale Makar",
+            "Patrice Bergeron"
+        ];
+        
+        // Funktio poimimaan satunnaisia elementtejä listasta
+        function getRandomPlayers(arr, num) {
+            const shuffled = [...arr].sort(() => 0.5 - Math.random());
+            return shuffled.slice(0, num);
+        }
 
         // Funktio viestin lisäämiseksi chat-historiaan
         function addMessage(text, sender) {
@@ -193,8 +212,25 @@
 
             // 1. KONTEKSTUAALISET VASTAUKSET
             
+            // UUSI KONTEKSTI: Jos odotetaan suosikkijääkiekkoilijaa
+            if (expectingHockeyPlayer) {
+                expectingHockeyPlayer = false;
+
+                const foundPlayer = BEST_HOCKEY_PLAYERS.find(p => normalizedMessage.includes(p.toLowerCase()));
+
+                if (foundPlayer) {
+                    response = `Upea valinta! ${foundPlayer} on todellinen tähti ja on tehnyt upean uran. Hänen taitonsa on huikea!`;
+                } else if (normalizedMessage.length > 5 && normalizedMessage.includes('ei')) {
+                    response = "Selvä. Onkin vaikeaa valita vain yksi! Puhutaan mieluummin Fortnitesta tai autoista, jos haluat!";
+                } else if (normalizedMessage.length > 3) {
+                    response = `Hienoa! Varmasti mahtava pelaaja. Valitettavasti minun 'miniaivoissani' ei ole siitä juuri nyt lisätietoa.`;
+                } else {
+                    response = "On niin monia hyviä pelaajia, että valinta on vaikea! Haluatko puhua jostain muusta aiheesta, esim. 'elokuva' tai 'minecraft'?";
+                }
+            }
+            
             // UUSI KONTEKSTI: Jos odotetaan elokuvan/sarjan genreä
-            if (expectingMovieGenre) {
+            else if (expectingMovieGenre) {
                 expectingMovieGenre = false;
                 const movieResponse = (genre) => `${genre.charAt(0).toUpperCase() + genre.slice(1)} on loistava valinta! Hyvät ${genre.toLowerCase()}-leffat ovat aina viihdyttäviä.`;
 
@@ -280,6 +316,7 @@
                 if (expectingMinecraftBlock) expectingMinecraftBlock = false;
                 if (expectingFortnitePlatform) expectingFortnitePlatform = false;
                 if (expectingMovieGenre) expectingMovieGenre = false; // Nollataan myös uusi tila
+                if (expectingHockeyPlayer) expectingHockeyPlayer = false; // Nollataan myös uusi tila
 
                 if (normalizedMessage.includes('hei') || normalizedMessage.includes('moi') || normalizedMessage.includes('terve')) {
                     response = "Hei! Kiva, kun otit yhteyttä. Kuinka voin olla avuksi?";
@@ -300,13 +337,29 @@
                 else if (normalizedMessage.includes('mitä kuuluu') || normalizedMessage.includes('kuulumiset')) {
                     response = "Kiitos kysymästä, minulla on kaikki hyvin. Olen valmis työskentelemään! Entä sinulla?";
                 } 
+                // UUSI SÄÄNTÖ: Minecraftin läpäiseminen
+                else if (normalizedMessage.includes('läpäistä minecraft') || normalizedMessage.includes('lopettaa minecraft') || normalizedMessage.includes('minecraftin loppu')) {
+                    response = "Minecraftin läpäiseminen tarkoittaa Ender Dragonin 🐉 voittamista End-ulottuvuudessa! Tässä on nopea ohje, kuinka se tapahtuu:\n\n1. Etsi ja kaiva Timantteja (Diamond) tarpeeksi.\n2. Rakenna Endin silmiä (Eye of Ender), joilla voit etsiä Stronghold-linnoituksen.\n3. Siirry Endiin End Portal -portaalista.\n4. Tuhoa Ender Dragonin parantavat kiteet.\n5. Voita Ender Dragon!\n\nHaluatko tarkemmat ohjeet johonkin tiettyyn vaiheeseen, esimerkiksi miten rakennetaan Endin silmiä?";
+                }
+                // UUSI SÄÄNTÖ: Roblox-ohjelmointi
+                else if (normalizedMessage.includes('roblox') || normalizedMessage.includes('ohjelmoi roblox')) {
+                    response = "Roblox-ohjelmointi on hauskaa! Se käyttää Lua-kieltä. Pääset parhaiten alkuun opettelemalla tekemään yksinkertaisen scriptin, joka saa osan (Part) vaihtamaan väriä tai liikkumaan. Se on hyvä aloitus! Haluatko minun etsivän lisää tietoa jostain muusta pelistä?";
+                }
+                // UUSI SÄÄNTÖ: Jääkiekkoilijat
+                else if (normalizedMessage.includes('jääkiekko') || normalizedMessage.includes('lätkä') || normalizedMessage.includes('jääkiekkoilija') || normalizedMessage.includes('parhaat pelaajat')) {
+                    const randomPlayers = getRandomPlayers(BEST_HOCKEY_PLAYERS, 3);
+                    const list = randomPlayers.join(', ');
+
+                    response = `Jääkiekko on mahtava laji! Tässä muutamia esimerkkejä 2000-luvun tähdistä: ${list}. Kuka on sinun ehdoton suosikkipelaajasi?`;
+                    expectingHockeyPlayer = true;
+                }
                 // UUSI SÄÄNTÖ: Hae verkosta (SIMULOITU)
                 else if (normalizedMessage.includes('hae verkosta') || normalizedMessage.includes('google') || normalizedMessage.includes('etsi netistä')) {
                     response = "Olen vain pieni robotti enkä pääse nettiin. Sääli! Minun täytyy luottaa niihin tietoihin, jotka minulla on jo koodissa. Kysy minulta 'mitä osaat', niin kerron mistä tiedän!";
                 }
-                // SÄÄNTÖ: Mitä osaat (PÄIVITETTY Elokuvien/Sarjojen KANSSA)
+                // SÄÄNTÖ: Mitä osaat (PÄIVITETTY KAIKILLA AIHEILLA)
                 else if (normalizedMessage.includes('mitä osaat') || normalizedMessage.includes('aiheita')) {
-                    response = "Osaan keskustella seuraavista aiheista: tervehdysten, autojen, lemmikkien, harrastusten (erityisesti jalkapallon), Minecraftin, Fortniten, hätätaktiikoiden, elokuvien ja sarjojen genren sekä vitsejen kertomisesta. Kokeile sanoa 'elokuva', 'Fortnite' tai 'hätäpoistumistaktiikka'!";
+                    response = "Osaan keskustella seuraavista aiheista: tervehdysten, autojen, lemmikkien, harrastusten (jalkapallo), Minecraftin läpäisyn, Fortniten, hätätaktiikoiden, elokuvien genren, jääkiekkoilijoiden, **Roblox-ohjelmoinnin perusteista** sekä vitsejen kertomisesta. Kokeile sanoa 'roblox', 'läpäistä minecraft' tai 'Fortnite'!";
                 }
                 // UUSI SÄÄNTÖ: Elokuvat/Sarjat
                 else if (normalizedMessage.includes('elokuva') || normalizedMessage.includes('sarja') || normalizedMessage.includes('leffa')) {
